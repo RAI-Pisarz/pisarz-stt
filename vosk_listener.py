@@ -8,7 +8,7 @@ import sys
 import sounddevice as sd
 from queue import Queue
 from vosk import Model, KaldiRecognizer
-
+from log import log
 q = Queue()
 
 
@@ -19,8 +19,8 @@ def callback(indata, frames, time, status):
     q.put(bytes(indata))
 
 
-def loop(input_channel, com_channel, parser, args):
-
+def loop(input_channel, com_channel, log_channel, parser, args):
+    source = 'VOSK'
     try:
         # set sample rate based on args
         if args.samplerate is None:
@@ -56,8 +56,8 @@ def loop(input_channel, com_channel, parser, args):
                     input_channel.put(rec.Result(), block=True)
 
 
-    except KeyboardInterrupt as e:
-        print('Done')
+    except KeyboardInterrupt:
+        print(f'{source} | INFO: Received STOP - Shutting down.')
         parser.exit(0)
 
     except Exception as e:

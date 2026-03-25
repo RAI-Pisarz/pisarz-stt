@@ -1,14 +1,16 @@
-def loop(thread_comms, main_comms):
+from log import log
+
+def loop(frame_channel, com_channel, log_channel):
+    source = 'UART'
     while True:
-        if not main_comms.empty() and main_comms.get() == 'STOP':
-            print('Goodnight')
-            main_comms.put('STOP')
-            main_comms.task_done()
-            return
+        if not com_channel.empty():
+            msg = com_channel.get()
 
+            match msg:
+                case 'STOP':
+                    print(f'{source} | INFO: Received STOP - shutting down.')
+                    return
 
+                case _:
+                    log(log_channel, 'ERROR', source, 'Unrecognised command on COM channel!')
 
-def strip(msg):
-    """Prepare text for further communication"""
-    msg = msg.split(':')
-    return msg
