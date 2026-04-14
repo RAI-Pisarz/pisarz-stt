@@ -9,11 +9,17 @@ def loop(frame_channel, com_channel, log_channel):
 
             match msg:
                 case 'STOP':
-                    print(f'{source} | INFO: Received STOP - shutting down.')
+                    log(log_channel, 'INFO', source, 'Received STOP - shutting down.')
                     return
 
                 case _:
                     log(log_channel, 'ERROR', source, 'Unrecognised command on COM channel!')
 
-        # just sleep for a bit
-        sleep(0.1)
+
+        if frame_channel.empty():
+            # just sleep for a bit to avoid eating the processor time
+            sleep(0.25)
+            continue
+
+        frame = frame_channel.get()
+        print(frame)

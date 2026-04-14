@@ -48,9 +48,9 @@ def linux_workaround(args):
     return source
 
 
-def loop(input_channel, com_channel, log_channel, parser, args):
+def loop(output_channel, com_channel, log_channel, parser, args):
     """
-    :param input_channel:
+    :param output_channel:
     :param com_channel:
     :param log_channel:
     :param parser:
@@ -114,7 +114,7 @@ def loop(input_channel, com_channel, log_channel, parser, args):
 
             match msg:
                 case 'STOP':
-                    print(f'\nWHISPER | INFO: Received STOP - shutting down.')
+                    log(log_channel, 'INFO', source, 'Received STOP - shutting down.')
                     break
 
                 case 'UPDATE':
@@ -141,7 +141,8 @@ def loop(input_channel, com_channel, log_channel, parser, args):
             if phrase_time and now - phrase_time > timedelta(seconds=phrase_timeout):
                 phrase_bytes = bytes()
                 phrase_complete = True
-                log(log_channel, 'TRACE', source, 'Phrase completed.')
+                log(log_channel, 'DEBUG', source, 'Phrase completed.')
+                log(log_channel, 'TRACE', source, f'Time: {datetime.now()}')
 
             # This is the last time we received new audio data from the queue.
             phrase_time = now
@@ -151,7 +152,7 @@ def loop(input_channel, com_channel, log_channel, parser, args):
             q.queue.clear()
             # Add the new audio data to the accumulated data for this phrase
             phrase_bytes += audio_data
-
+            log(log_channel, 'TRACE', source, 'Updated phrase bytes.')
             # Convert in-ram buffer to something the model can use directly without needing a temp file.
             # Convert data from 16 bit wide integers to floating point with a width of 32 bits.
             # Clamp the audio stream frequency to a PCM wavelength compatible default of 32768hz max.
@@ -160,14 +161,18 @@ def loop(input_channel, com_channel, log_channel, parser, args):
             # Read the transcription.
             result = audio_model.transcribe(audio_np, fp16=torch.cuda.is_available(), language='pl')
             text = result['text'].strip()
-
+            log(log_channel, 'TRACE', source, f'stripped text: {text}')
             # If we detected a pause between recordings, add a new item to our transcription.
             # Otherwise edit the existing one.
-            if phrase_complete:
-                input_channel.put(transcription)
+            if phrase_complete and not transcription == '':
+                log(log_channel, 'TRACE', source, 'Putting transcribed phrase in the queue.\n'
+                                                  f'\t\tPhrase is {'empty' if transcription == '' else transcription}')
+                output_channel.put(transcription)
                 transcription = ''
-            else:
+            elif not text == '':
                 transcription = text
+            else: # for the sake of cpu's mental health
+                sleep(0.3)
 
         except KeyboardInterrupt:
             break

@@ -42,8 +42,8 @@ if __name__ == "__main__":
 
         # prepare threads
         model_thread = th.Thread(target=model.loop, args=(INPUT_CHANNEL, MCOM_CHANNEL, LOG_CHANNEL, parser, args))
-        uart_thread = th.Thread(target=uart.loop, args=(INPUT_CHANNEL, UCOM_CHANNEL,  LOG_CHANNEL))
-        frame_thread = th.Thread(target=frame_builder.loop, args=(INPUT_CHANNEL, FCOM_CHANNEL, LOG_CHANNEL))
+        uart_thread = th.Thread(target=uart.loop, args=(FRAME_CHANNEL, UCOM_CHANNEL,  LOG_CHANNEL))
+        frame_thread = th.Thread(target=frame_builder.loop, args=(INPUT_CHANNEL, FRAME_CHANNEL, FCOM_CHANNEL, LOG_CHANNEL))
         log_thread = th.Thread(target=log.loop, args=(LOG_CHANNEL, LCOM_CHANNEL))
 
         model_thread.start()
@@ -80,12 +80,13 @@ if __name__ == "__main__":
 
     except (KeyboardInterrupt, SystemExit):
         print(f"\n{source} | INFO: Shutting down...")
-        LCOM_CHANNEL.put('STOP')
         UCOM_CHANNEL.put('STOP')
         MCOM_CHANNEL.put('STOP')
         FCOM_CHANNEL.put('STOP')
-        uart_thread.join(1)
-        frame_thread.join(1)
-        model_thread.join(1)
+        uart_thread.join(10)
+        frame_thread.join(10)
+        model_thread.join(10)
+
+        LCOM_CHANNEL.put('STOP')
         log_thread.join(1)
         sys.exit()

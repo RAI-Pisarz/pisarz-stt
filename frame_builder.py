@@ -1,14 +1,27 @@
-import sys
-from log import log
+import sys, queue, configparser
+
+from sympy.printing.numpy import const
+
+from log import log, init
+from time import sleep
 
 def b_sizeof(b: bytes) -> int:
     return sys.getsizeof(b) - sys.getsizeof(bytes('', 'utf-8'))
 
 
-def loop(input_channel, com_channel, log_channel):
-    work_string = ''
-    source = 'FRME'
+def loop(input_channel, output_channel, com_channel, log_channel):
+    config = init()
+    work_bytes = b''
+    source = 'FRAMER '
     retry = 0
+    max_retry = int(config['uart']['max_retry'])
+    retry_time = float(config['uart']['retry_time'])
+    USE_PICP = config.getboolean('uart', 'USE_PICP')
+    if not USE_PICP:
+        frame_size = int(config['uart']['frame_size'])
+    else:
+        frame_size = 29
+
 
     while True:
 
@@ -16,25 +29,49 @@ def loop(input_channel, com_channel, log_channel):
             msg = com_channel.get()
             match msg:
                 case 'STOP':
-                    print(f'{source} | INFO: Received STOP - Shutting down.')
+                    log(log_channel, 'INFO', source, 'Received STOP - shutting down.')
                     return
 
                 case _:
                     log(log_channel, 'ERROR', source, 'Unrecognised command on COM channel!')
 
         # wait until new input appears
-        if input_channel.empty():
+        if input_channel.empty() and not retry and work_bytes == b'':
+            sleep(retry_time)
             continue
+        log(log_channel, 'TRACE', source, f'SLEEPER CONDITION FOR THE LOOP: \n'
+                                          f'\t\tinput channel: {'empty' if input_channel.empty() else 'full' }\n'
+                                          f'\t\tretry: {retry}\n'
+                                          f'\t\twork_bytes: {work_bytes}\n')
+        try:
+            input_string = input_channel.get(timeout=0.5)
+            work_bytes += bytes(input_string, 'utf-8')
+            input_channel.task_done()
+        except queue.Empty:
+            pass
 
-        # get out only the processed string
-        work_string += input_channel.get(timeout=0.5)[2:-3].split(':')[1].strip()[1:]
-        input_channel.task_done()
-
-        # don't immediately give up to limit padded frames
-        if len(work_string) < 29 and retry < 3:
+        if len(work_bytes) < frame_size and retry < max_retry:
+            log(log_channel, 'TRACE', source, f'Work bytes too short, retrying {retry}...')
             retry += 1
             continue
         retry = 0
 
-        frame_str = work_string[:29]
-        work_string = work_string[len(frame_str):]
+        log(log_channel, 'DEBUG', source, '\n'
+              f'\t\tExtracting from: {work_bytes}\n'
+              f'\t\tExtracting {frame_size} bytes\n'
+              f'\t\tExtracting {work_bytes[:frame_size]}')
+
+
+        frame_bytes = work_bytes[:frame_size]
+        work_bytes = work_bytes[len(frame_bytes):]
+
+        if not USE_PICP:
+            output_channel.put(frame_bytes)
+            continue
+        # else:
+        """
+            TODO:
+            PICP implementation
+        """
+
+

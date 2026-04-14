@@ -1,5 +1,6 @@
-import configparser, queue, sys
+import configparser, queue, sys, os
 from time import sleep
+from datetime import datetime
 
 class LogError(Exception):
     def __init__(self, message):
@@ -22,16 +23,23 @@ def init():
     return config
 
 def loop(log_channel: queue.Queue, com_channel: queue.Queue):
+
     config = init()
     source = 'LOGGER '
+    logfile = f'{config['log']['log_path']}pisarz.{datetime.now().strftime('%Y-%m-%d.%H-%M-%S')}.log'
+    if not os.path.exists(config['log']['log_path']):
+        os.makedirs(config['log']['log_path'])
+
     while True:
         if not com_channel.empty():
             msg = com_channel.get()
             # do something
             match msg:
                 case 'STOP':
-                    print(f'{source} | INFO: Received STOP - shutting down.')
-                    return
+                    if log_channel.empty():
+                        print(f'{source} | INFO: Received STOP - shutting down.')
+                        return
+                    com_channel.put(msg)
 
                 case 'UPDATE':
                     log(log_channel, 'INFO', source, 'Updating config.')
@@ -50,14 +58,16 @@ def loop(log_channel: queue.Queue, com_channel: queue.Queue):
 
             print(f'{msg[1]} | {msg[0]}: {msg[2]}')
 
-            if not config['log']['dump'] == 'TRUE':
+            if not config.getboolean('log', 'dump'):
                 raise LogError('Dumping off, ignoring')
 
-            with open(config['log']['logfile'], 'a') as f:
-                f.write(msg[2] + '\n')
+            with open(logfile, 'a', encoding='utf-8') as f:
+                print(f'{msg[1]} | {msg[0]}: {msg[2]}', file=f)
 
         except queue.Empty: #ignore timeout
             pass
+
+
 
         except LogError:
             pass
