@@ -1,4 +1,5 @@
 import configparser, queue, sys
+from time import sleep
 
 class LogError(Exception):
     def __init__(self, message):
@@ -22,7 +23,7 @@ def init():
 
 def loop(log_channel: queue.Queue, com_channel: queue.Queue):
     config = init()
-    source = 'LOG '
+    source = 'LOGGER '
     while True:
         if not com_channel.empty():
             msg = com_channel.get()
@@ -60,3 +61,6 @@ def loop(log_channel: queue.Queue, com_channel: queue.Queue):
 
         except LogError:
             pass
+
+        # just sleep for a bit
+        sleep(0.1)

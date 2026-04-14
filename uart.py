@@ -1,7 +1,8 @@
 from log import log
+from time import sleep
 
 def loop(frame_channel, com_channel, log_channel):
-    source = 'UART'
+    source = 'UART   '
     while True:
         if not com_channel.empty():
             msg = com_channel.get()
@@ -14,3 +15,5 @@ def loop(frame_channel, com_channel, log_channel):
                 case _:
                     log(log_channel, 'ERROR', source, 'Unrecognised command on COM channel!')
 
+        # just sleep for a bit
+        sleep(0.1)
