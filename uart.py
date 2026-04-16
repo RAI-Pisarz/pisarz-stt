@@ -1,19 +1,19 @@
-from log import log
+from log import LogAgent
 from time import sleep
 
 def loop(frame_channel, com_channel, log_channel):
-    source = 'UART   '
+    logger = LogAgent(log_channel, 'UART   ')
     while True:
         if not com_channel.empty():
             msg = com_channel.get()
 
             match msg:
                 case 'STOP':
-                    log(log_channel, 'INFO', source, 'Received STOP - shutting down.')
+                    logger.log('INFO', 'Received STOP - shutting down.')
                     return
 
                 case _:
-                    log(log_channel, 'ERROR', source, 'Unrecognised command on COM channel!')
+                    logger.log('ERROR', 'Unrecognised command on COM channel!')
 
 
         if frame_channel.empty():

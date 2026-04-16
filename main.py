@@ -24,9 +24,9 @@ if __name__ == "__main__":
     MCOM_CHANNEL = Queue()
     UCOM_CHANNEL = Queue()
     FCOM_CHANNEL = Queue()
-
-    source = 'MAIN   '
     internal_state = ''
+
+    logger = log.LogAgent(LOG_CHANNEL, 'MAIN   ')
 
     try:
         # parse arguments put in the command
@@ -70,7 +70,7 @@ if __name__ == "__main__":
                     pass
 
                 case _:
-                    log.log(LOG_CHANNEL, 'ERROR', source, f'Unknown command: {command}')
+                    logger.log('ERROR', f'Unknown command: {command}')
 
             # just sleep for a bit
             sleep(0.25)
@@ -79,7 +79,7 @@ if __name__ == "__main__":
 
 
     except (KeyboardInterrupt, SystemExit):
-        print(f"\n{source} | INFO: Shutting down...")
+        print(f"\n{logger.source} | INFO: Shutting down...")
         UCOM_CHANNEL.put('STOP')
         MCOM_CHANNEL.put('STOP')
         FCOM_CHANNEL.put('STOP')
@@ -88,5 +88,5 @@ if __name__ == "__main__":
         model_thread.join(10)
 
         LCOM_CHANNEL.put('STOP')
-        log_thread.join(1)
+        log_thread.join(10)
         sys.exit()

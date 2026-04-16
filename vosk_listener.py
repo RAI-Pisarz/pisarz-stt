@@ -8,7 +8,7 @@ import sys
 import sounddevice as sd
 from queue import Queue
 from vosk import Model, KaldiRecognizer
-from log import log
+from log import LogAgent
 
 # queue for model callback
 q = Queue()

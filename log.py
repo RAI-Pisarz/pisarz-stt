@@ -1,10 +1,35 @@
-import configparser, queue, sys, os
+import configparser, queue, os #, sys
 from time import sleep
 from datetime import datetime
 
 class LogError(Exception):
     def __init__(self, message):
         self.message = message
+
+class LogAgent:
+    """
+    An agent to communicate with logger thread
+    """
+    def __init__(self, log_queue: queue.Queue, source: str):
+        """
+        :param log_queue: Synchronised queue shared with log thread to put log messages to
+        :param source: Name to display in the logs sent from this agent
+
+        An agent to communicate with logger thread. Call method log(level, message) to emmit a log message
+
+        """
+        self.queue = log_queue
+        self.source = source
+
+    def log(self, level, message: str):
+        """
+        Send a log message to the log thread
+        :param level: See LogLevel dictionary, accepts both string and integer level
+        :param message: Message to be displayed
+        :return:
+        """
+        if type(level) is int: level = LogLevel[level]
+        self.queue.put([level, self.source, message])
 
 LogLevel = {
     'TRACE':    1,
@@ -14,18 +39,14 @@ LogLevel = {
     'ERROR':    5
 }
 
-def log(q: queue.Queue, level, source, message):
-    q.put([level, source, message])
-
 def init():
     config = configparser.ConfigParser()
     config.read('pisarz.ini')
     return config
 
 def loop(log_channel: queue.Queue, com_channel: queue.Queue):
-
+    logger = LogAgent(log_channel, 'LOGGER ')
     config = init()
-    source = 'LOGGER '
     logfile = f'{config['log']['log_path']}pisarz.{datetime.now().strftime('%Y-%m-%d.%H-%M-%S')}.log'
     if not os.path.exists(config['log']['log_path']):
         os.makedirs(config['log']['log_path'])
@@ -37,16 +58,16 @@ def loop(log_channel: queue.Queue, com_channel: queue.Queue):
             match msg:
                 case 'STOP':
                     if log_channel.empty():
-                        print(f'{source} | INFO: Received STOP - shutting down.')
+                        print(f'LOGGER  | INFO: Received STOP - shutting down.')
                         return
                     com_channel.put(msg)
 
                 case 'UPDATE':
-                    log(log_channel, 'INFO', source, 'Updating config.')
+                    logger.log('INFO', 'Updating config.')
                     config = init()
 
                 case _:
-                    log(log_channel, 'ERROR', source, 'Unrecognised command on COM channel!')
+                    logger.log('ERROR', 'Unrecognised command on COM channel!')
 
         try:
             msg = log_channel.get(timeout=2)

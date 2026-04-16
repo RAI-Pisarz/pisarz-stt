@@ -1,8 +1,6 @@
-import sys, queue, configparser
+import sys, queue #, configparser
 
-from sympy.printing.numpy import const
-
-from log import log, init
+from log import LogAgent, init
 from time import sleep
 
 def b_sizeof(b: bytes) -> int:
@@ -10,9 +8,9 @@ def b_sizeof(b: bytes) -> int:
 
 
 def loop(input_channel, output_channel, com_channel, log_channel):
+    logger = LogAgent(log_channel, 'FRAMER ')
     config = init()
     work_bytes = b''
-    source = 'FRAMER '
     retry = 0
     max_retry = int(config['uart']['max_retry'])
     retry_time = float(config['uart']['retry_time'])
@@ -29,17 +27,17 @@ def loop(input_channel, output_channel, com_channel, log_channel):
             msg = com_channel.get()
             match msg:
                 case 'STOP':
-                    log(log_channel, 'INFO', source, 'Received STOP - shutting down.')
+                    logger.log('INFO', 'Received STOP - shutting down.')
                     return
 
                 case _:
-                    log(log_channel, 'ERROR', source, 'Unrecognised command on COM channel!')
+                    logger.log('ERROR', 'Unrecognised command on COM channel!')
 
         # wait until new input appears
         if input_channel.empty() and not retry and work_bytes == b'':
             sleep(retry_time)
             continue
-        log(log_channel, 'TRACE', source, f'SLEEPER CONDITION FOR THE LOOP: \n'
+        logger.log('TRACE', f'SLEEPER CONDITION FOR THE LOOP: \n'
                                           f'\t\tinput channel: {'empty' if input_channel.empty() else 'full' }\n'
                                           f'\t\tretry: {retry}\n'
                                           f'\t\twork_bytes: {work_bytes}\n')
@@ -51,12 +49,12 @@ def loop(input_channel, output_channel, com_channel, log_channel):
             pass
 
         if len(work_bytes) < frame_size and retry < max_retry:
-            log(log_channel, 'TRACE', source, f'Work bytes too short, retrying {retry}...')
+            logger.log('TRACE', f'Work bytes too short, retrying {retry}...')
             retry += 1
             continue
         retry = 0
 
-        log(log_channel, 'DEBUG', source, '\n'
+        logger.log('DEBUG', '\n'
               f'\t\tExtracting from: {work_bytes}\n'
               f'\t\tExtracting {frame_size} bytes\n'
               f'\t\tExtracting {work_bytes[:frame_size]}')
