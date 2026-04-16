@@ -54,7 +54,7 @@ def loop(input_channel, output_channel, com_channel, log_channel):
             continue
         retry = 0
 
-        logger.log('DEBUG', '\n'
+        logger.log('TRACE', '\n'
               f'\t\tExtracting from: {work_bytes}\n'
               f'\t\tExtracting {frame_size} bytes\n'
               f'\t\tExtracting {work_bytes[:frame_size]}')
@@ -69,7 +69,7 @@ def loop(input_channel, output_channel, com_channel, log_channel):
         # else:
         """
             TODO:
-            PICP implementation
+            PICP frame building implementation
         """
 
 

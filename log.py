@@ -15,8 +15,8 @@ class LogAgent:
         :param log_queue: Synchronised queue shared with log thread to put log messages to
         :param source: Name to display in the logs sent from this agent
 
-        An agent to communicate with logger thread. Call method log(level, message) to emmit a log message
-
+        An agent to communicate with logger thread. Call method log(level, message) to emmit a log message.
+        If many threads send a log message to the logger at the same time, it is undefined which message will be logged first.
         """
         self.queue = log_queue
         self.source = source
@@ -27,6 +27,8 @@ class LogAgent:
         :param level: See LogLevel dictionary, accepts both string and integer level
         :param message: Message to be displayed
         :return:
+
+        If many threads send a log message to the logger at the same time, it is undefined which message will be logged first.
         """
         if type(level) is int: level = LogLevel[level]
         self.queue.put([level, self.source, message])
@@ -48,6 +50,7 @@ def loop(log_channel: queue.Queue, com_channel: queue.Queue):
     logger = LogAgent(log_channel, 'LOGGER ')
     config = init()
     logfile = f'{config['log']['log_path']}pisarz.{datetime.now().strftime('%Y-%m-%d.%H-%M-%S')}.log'
+    logallfile = f'{logfile}.all.log'
     if not os.path.exists(config['log']['log_path']):
         os.makedirs(config['log']['log_path'])
 
@@ -72,6 +75,9 @@ def loop(log_channel: queue.Queue, com_channel: queue.Queue):
         try:
             msg = log_channel.get(timeout=2)
             log_channel.task_done()
+            if config.getboolean('log', 'log_all'):
+                with open(logallfile, 'a', encoding='utf-8') as f:
+                    print(f'{msg[1]} | {msg[0]}: {msg[2]}', file=f)
 
             # skip the message if logging level wrong
             if LogLevel[config['log']['level']] > LogLevel[msg[0]]:
@@ -86,12 +92,10 @@ def loop(log_channel: queue.Queue, com_channel: queue.Queue):
                 print(f'{msg[1]} | {msg[0]}: {msg[2]}', file=f)
 
         except queue.Empty: #ignore timeout
-            pass
-
-
+            sleep(0.1)
 
         except LogError:
-            pass
+            sleep(0.1)
 
         # just sleep for a bit
         sleep(0.1)
