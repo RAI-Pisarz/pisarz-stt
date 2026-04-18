@@ -6,7 +6,6 @@ from time import sleep
 def b_sizeof(b: bytes) -> int:
     return sys.getsizeof(b) - sys.getsizeof(bytes('', 'utf-8'))
 
-
 def loop(input_channel, output_channel, com_channel, log_channel):
     logger = LogAgent(log_channel, 'FRAMER ')
     config = init()
@@ -15,32 +14,47 @@ def loop(input_channel, output_channel, com_channel, log_channel):
     max_retry = int(config['uart']['max_retry'])
     retry_time = float(config['uart']['retry_time'])
     USE_PICP = config.getboolean('uart', 'USE_PICP')
+    state = 'WORK'
     if not USE_PICP:
         frame_size = int(config['uart']['frame_size'])
     else:
         frame_size = 29
 
-
     while True:
+
 
         if not com_channel.empty():
             msg = com_channel.get()
             match msg:
+                case 'WAIT':
+                    logger.log('INFO', 'Received WAIT - halting work.')
+                    state = 'WAIT'
+
+                case 'RESUME':
+                    logger.log('INFO', 'Received RESUME - resuming work.')
+                    state = 'WORK'
+
+                case 'GET STATE':
+                    logger.log('TRACE', 'Received GET STATE.')
+                    logger.log('INFO', f'Current state: {state}')
+
                 case 'STOP':
                     logger.log('INFO', 'Received STOP - shutting down.')
                     return
 
                 case _:
-                    logger.log('ERROR', 'Unrecognised command on COM channel!')
+                    logger.log('ERROR', f'Unrecognised command {msg} on COM channel!')
 
-        # wait until new input appears
-        if input_channel.empty() and not retry and work_bytes == b'':
+        # wait until new input appears or state changes
+        if state == 'WAIT' or (input_channel.empty() and not retry and work_bytes == b''):
             sleep(retry_time)
             continue
+
         logger.log('TRACE', f'SLEEPER CONDITION FOR THE LOOP: \n'
                                           f'\t\tinput channel: {'empty' if input_channel.empty() else 'full' }\n'
                                           f'\t\tretry: {retry}\n'
                                           f'\t\twork_bytes: {work_bytes}\n')
+
         try:
             input_string = input_channel.get(timeout=0.5)
             work_bytes += bytes(input_string, 'utf-8')

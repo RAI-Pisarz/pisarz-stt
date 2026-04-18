@@ -6,10 +6,54 @@
 import uart, vosk_listener, whisper_listener, frame_builder, parser, log
 
 # globals
-import sys
-import threading as th
-from queue import Queue
+import sys, threading as th, queue as q
 from time import sleep
+
+def state(command):
+    command[1] = command[1].lower()
+    match command[1]:
+        case 'set':
+            channel = None
+            match command[2]:
+                case 'model':
+                    channel = MCOM_CHANNEL
+                case 'uart':
+                    channel = UCOM_CHANNEL
+                case 'framer':
+                    channel = FCOM_CHANNEL
+            if channel is None:
+                logger.log('ERROR', f'Can\'t set state for: {command[2]}.')
+                return
+            if command[3].upper() == 'WORK':
+                command[3] = 'RESUME'
+            channel.put(command[3].upper())
+
+        case 'model':
+            if not model_thread.is_alive():
+                logger.log('ERROR', f'Frame builder is not running.')
+                return
+            MCOM_CHANNEL.put('GET STATE')
+
+        case 'uart':
+            if not uart_thread.is_alive():
+                logger.log('ERROR', f'Frame builder is not running.')
+                return
+            UCOM_CHANNEL.put('GET STATE')
+
+        case 'framer':
+            if not frame_thread.is_alive():
+                logger.log('ERROR', f'Frame builder is not running.')
+                return
+            FCOM_CHANNEL.put('GET STATE')
+
+        case 'logger':
+            print('Logging agent has no internal state to track.')
+
+        case 'help':
+            print('Not implemented yet.')
+
+        case _:
+            logger.log('ERROR', f'Incorrect argument: {command[1]}. Check state help for usage.')
 
 if __name__ == "__main__":
 
@@ -17,13 +61,13 @@ if __name__ == "__main__":
     print("## Welcome.")
     print("#" * 80)
 
-    INPUT_CHANNEL = Queue()
-    FRAME_CHANNEL = Queue()
-    LOG_CHANNEL = Queue()
-    LCOM_CHANNEL = Queue()
-    MCOM_CHANNEL = Queue()
-    UCOM_CHANNEL = Queue()
-    FCOM_CHANNEL = Queue()
+    INPUT_CHANNEL = q.Queue()
+    FRAME_CHANNEL = q.Queue()
+    LOG_CHANNEL   = q.Queue()
+    LCOM_CHANNEL  = q.Queue()
+    FCOM_CHANNEL  = q.Queue()
+    MCOM_CHANNEL  = q.Queue()
+    UCOM_CHANNEL  = q.Queue()
     internal_state = ''
 
     logger = log.LogAgent(LOG_CHANNEL, 'MAIN   ')
@@ -61,13 +105,20 @@ if __name__ == "__main__":
 
 
             # command thread
+
             command = input("user@PISARZ $ ").strip()
-            match command:
+            logger.log('DEBUG', f'Received command {command}')
+            command = command.split(' ')
+            match command[0]:
                 case 'quit':
                     raise KeyboardInterrupt
 
-                case '':
-                    pass
+                case 'state':
+                    try:
+                        state(command)
+                    except:
+                        logger.log('ERROR',
+                                   f'Encountered unexpected error while executing command: {command[1]}.')
 
                 case _:
                     logger.log('ERROR', f'Unknown command: {command}')

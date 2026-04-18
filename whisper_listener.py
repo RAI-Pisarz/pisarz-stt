@@ -66,6 +66,7 @@ def loop(output_channel, com_channel, log_channel, parser, args):
     config = init()
     logger = LogAgent(log_channel, 'WHISPER')
     logger.log('TRACE', 'Initialising model...')
+    state = 'WORK'
 
     phrase_time = None
     phrase_bytes = bytes()
@@ -113,6 +114,18 @@ def loop(output_channel, com_channel, log_channel, parser, args):
             msg = com_channel.get()
 
             match msg:
+                case 'WAIT':
+                    logger.log('INFO', 'Received WAIT - halting work.')
+                    state = 'WAIT'
+
+                case 'RESUME':
+                    logger.log('INFO', 'Received RESUME - resuming work.')
+                    state = 'WORK'
+
+                case 'GET STATE':
+                    logger.log('TRACE', 'Received GET STATE.')
+                    logger.log('INFO', f'Current state: {state}')
+
                 case 'STOP':
                     logger.log( 'INFO', 'Received STOP - shutting down.')
                     break
@@ -125,6 +138,12 @@ def loop(output_channel, com_channel, log_channel, parser, args):
                 case _:
                     logger.log( 'ERROR', 'Unrecognised command on COM channel!')
 
+        if state == 'WAIT':
+            if not q.empty(): # empty the queue
+                a = q.get()
+                q.task_done()
+            sleep(0.25)
+            continue
 
         try:
             now = datetime.now()
