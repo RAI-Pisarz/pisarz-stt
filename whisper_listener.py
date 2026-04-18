@@ -122,6 +122,10 @@ def loop(output_channel, com_channel, log_channel, parser, args):
                     logger.log('INFO', 'Received RESUME - resuming work.')
                     state = 'WORK'
 
+                case 'QUIET':
+                    logger.log('INFO', 'Received QUIET - silent work.')
+                    state = 'QUIET'
+
                 case 'GET STATE':
                     logger.log('TRACE', 'Received GET STATE.')
                     logger.log('INFO', f'Current state: {state}')
@@ -140,7 +144,7 @@ def loop(output_channel, com_channel, log_channel, parser, args):
 
         if state == 'WAIT':
             if not q.empty(): # empty the queue
-                a = q.get()
+                q.get()
                 q.task_done()
             sleep(0.25)
             continue
@@ -160,8 +164,8 @@ def loop(output_channel, com_channel, log_channel, parser, args):
             if phrase_time and now - phrase_time > timedelta(seconds=phrase_timeout):
                 phrase_bytes = bytes()
                 phrase_complete = True
-                logger.log( 'DEBUG', 'Phrase completed.')
-                logger.log( 'TRACE', f'Time: {datetime.now()}')
+                if state != 'QUIET': logger.log( 'DEBUG', 'Phrase completed.')
+                if state != 'QUIET': logger.log( 'TRACE', f'Time: {datetime.now()}')
 
             # This is the last time we received new audio data from the queue.
             phrase_time = now
@@ -171,7 +175,7 @@ def loop(output_channel, com_channel, log_channel, parser, args):
             q.queue.clear()
             # Add the new audio data to the accumulated data for this phrase
             phrase_bytes += audio_data
-            logger.log( 'TRACE', 'Updated phrase bytes.')
+            if state != 'QUIET': logger.log( 'TRACE', 'Updated phrase bytes.')
             # Convert in-ram buffer to something the model can use directly without needing a temp file.
             # Convert data from 16-bit wide integers to floating point with a width of 32 bits.
             # Clamp the audio stream frequency to a PCM wavelength compatible default of 32768hz max.
@@ -180,11 +184,11 @@ def loop(output_channel, com_channel, log_channel, parser, args):
             # Read the transcription.
             result = audio_model.transcribe(audio_np, fp16=torch.cuda.is_available(), language='pl')
             text = result['text'].strip()
-            logger.log( 'TRACE', f'stripped text: {text}')
+            if state != 'QUIET': logger.log( 'TRACE', f'stripped text: {text}')
             # If we detected a pause between recordings, add a new item to our transcription.
             # Otherwise, edit the existing one.
             if phrase_complete and not transcription == '':
-                logger.log( 'TRACE', 'Putting transcribed phrase in the queue.\n'
+                if state != 'QUIET': logger.log( 'TRACE', 'Putting transcribed phrase in the queue.\n'
                                                   f'\t\tPhrase is {'empty' if transcription == '' else transcription}')
                 output_channel.put(transcription)
                 transcription = ''

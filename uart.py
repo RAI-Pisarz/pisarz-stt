@@ -28,7 +28,6 @@ def loop(frame_channel, com_channel, log_channel):
     # Serial init
     serial = connect(logger, config)
 
-    connect(logger, config)
     ##################
     # MAIN UART LOOP #
     ##################

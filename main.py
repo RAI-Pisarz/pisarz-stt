@@ -10,6 +10,9 @@ import sys, threading as th, queue as q
 from time import sleep
 
 def state(command):
+    if len(command) < 2:
+        state([command[0], 'help'])
+        return
     command[1] = command[1].lower()
     match command[1]:
         case 'set':
@@ -50,7 +53,15 @@ def state(command):
             print('Logging agent has no internal state to track.')
 
         case 'help':
-            print('Not implemented yet.')
+            print('state - used for checking and setting internal states for threads.\n'
+                  '\tusage:\n'
+                  '\t\tstate {module}\n'
+                  '\t\tstate set {module} {state}\n\n'
+                  '\tavailable modules: model uart framer\n'
+                  '\tavailable states:  WAIT, WORK, RESUME, STOP\n'
+                  '\tmodel has additional QUIET state to suppress any logging.\n'
+                  '\tmind: WORK and RESUME are synonymous.\n'
+                  '\t\tSTOP will kill the thread\n.')
 
         case _:
             logger.log('ERROR', f'Incorrect argument: {command[1]}. Check state help for usage.')
@@ -69,7 +80,7 @@ if __name__ == "__main__":
     MCOM_CHANNEL  = q.Queue()
     UCOM_CHANNEL  = q.Queue()
     internal_state = ''
-
+    command = None
     logger = log.LogAgent(LOG_CHANNEL, 'MAIN   ')
 
     try:
@@ -106,7 +117,7 @@ if __name__ == "__main__":
 
             # command thread
 
-            command = input("user@PISARZ $ ").strip()
+            command = input("user@PISARZ $ ").strip() if command is None else command
             logger.log('DEBUG', f'Received command {command}')
             command = command.split(' ')
             match command[0]:
@@ -121,10 +132,10 @@ if __name__ == "__main__":
                                    f'Encountered unexpected error while executing command: {command[1]}.')
 
                 case _:
-                    logger.log('ERROR', f'Unknown command: {command}')
-
+                    logger.log('ERROR', f'Unknown command: {' '.join(command)}')
+            command = None
             # just sleep for a bit
-            sleep(0.25)
+            sleep(0.1)
 
 
 
