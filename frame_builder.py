@@ -1,7 +1,8 @@
-import sys, queue #, configparser
+import sys, queue, picp #, configparser
 
 from log import LogAgent, init
 from time import sleep
+from crc import Calculator, Crc8
 
 def b_sizeof(b: bytes) -> int:
     return sys.getsizeof(b) - sys.getsizeof(bytes('', 'utf-8'))
@@ -14,12 +15,15 @@ def loop(input_channel, output_channel, com_channel, log_channel):
     max_retry = int(config['uart']['max_retry'])
     retry_time = float(config['uart']['retry_time'])
     USE_PICP = config.getboolean('uart', 'USE_PICP')
+    continue_last_message = False
+    demand_reply = False
     state = 'WORK'
     if not USE_PICP:
         frame_size = int(config['uart']['frame_size'])
+        calculator = None
     else:
         frame_size = 29
-
+        calculator = Calculator(Crc8.CCITT, optimized=True)
     while True:
 
 
@@ -74,16 +78,28 @@ def loop(input_channel, output_channel, com_channel, log_channel):
               f'\t\tExtracting {work_bytes[:frame_size]}')
 
 
-        frame_bytes = work_bytes[:frame_size]
-        work_bytes = work_bytes[len(frame_bytes):]
+        message_bytes = work_bytes[:frame_size]
+        work_bytes = work_bytes[len(message_bytes):]
 
         if not USE_PICP:
-            output_channel.put(frame_bytes)
+            output_channel.put(message_bytes)
             continue
         # else:
         """
             TODO:
             PICP frame building implementation
         """
+        start_bits = picp.StartBits.CNT_START.value if continue_last_message else picp.StartBits.MSG_START.value
+        start_byte = picp.compute_start_byte(len(message_bytes), start_bits)
+        # message_bytes
+        crc_byte = calculator.checksum(start_byte + message_bytes).to_bytes(1, 'big')
+        if message_bytes[-1] < 0b10000000:
+            end_byte = picp.EndBytes.MSG_END.value
+            continue_last_message = False
+        else:
+            end_byte = picp.EndBytes.CNT_END.value
+            continue_last_message = True
 
+        frame_bytes = start_byte + message_bytes + crc_byte + end_byte
+        output_channel.put(frame_bytes)
 

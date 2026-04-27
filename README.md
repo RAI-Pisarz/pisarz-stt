@@ -30,23 +30,28 @@ It is designed to allow for two-way communication between devices. Protocol uses
 | 100  | RPL_MSG  | Following message is a reply to the last recieved message ended with RPL_END byte.                                           |
 
 Following five bits contain length of the message encoded as an unsigned integer. 
-Only first MSG_LENGTH bytes after START contain useful information. Following bytes up to Byte 29 are padding. 
+Only first MSG_LENGTH bytes after START byte contain useful information. Following bytes up to Byte 29 are padding. 
+
+### CRC Byte
+
+The CRC byte contains a CRC checksum calculated using CRC-8-CCITT algorithm. The checksum is calculated on all previous bytes - both start byte and message bytes.
 
 ### END byte structure
 
 **END** byte contains only information regarding this and next message sent as follows:
 
-| Bits      | MSG_TYPE | Desc                                                                                                                                     |
-|-----------|----------|------------------------------------------------------------------------------------------------------------------------------------------|
-| 0001 0000 | MSG_END  | This is the end of message.                                                                                                              |
-| 0010 0000 | CNT_END  | This message is split between data frames. Last MSG byte of this and first MSG byte of next are likely to be part of the same data unit. |
-| 0100 0000 | RPL_END  | Demands a reply from reciever.                                                                                                           |
+| Bits      | Hex  | MSG_TYPE | Desc                                                                                                                                     |
+|-----------|------|----------|------------------------------------------------------------------------------------------------------------------------------------------|
+| 0001 0000 | 0x10 | MSG_END  | This is the end of message.                                                                                                              |
+| 0010 0000 | 0x20 | CNT_END  | This message is split between data frames. Last MSG byte of this and first MSG byte of next are likely to be part of the same data unit. |
+| 0100 0000 | 0x40 | RPL_END  | Demands a reply from reciever.                                                                                                           |
 
 
 Required libraries:
-- 
+- crc
 - system
 - argparse
 - sounddevice
 - queue
 - vosk
+- whisper

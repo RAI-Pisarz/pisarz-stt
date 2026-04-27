@@ -53,18 +53,23 @@ def state(command):
             print('Logging agent has no internal state to track.')
 
         case 'help':
-            print('state - used for checking and setting internal states for threads.\n'
+            print('\nstate - used for checking and setting internal states for threads.\n'
                   '\tusage:\n'
                   '\t\tstate {module}\n'
                   '\t\tstate set {module} {state}\n\n'
                   '\tavailable modules: model uart framer\n'
                   '\tavailable states:  WAIT, WORK, RESUME, STOP\n'
-                  '\tmodel has additional QUIET state to suppress any logging.\n'
-                  '\tmind: WORK and RESUME are synonymous.\n'
-                  '\t\tSTOP will kill the thread\n.')
+                  '\tmodel has additional QUIET state to suppress any logging\n'
+                  '\tmind: WORK and RESUME are synonymous\n'
+                  '\t      STOP will kill the thread.\n\n')
 
         case _:
             logger.log('ERROR', f'Incorrect argument: {command[1]}. Check state help for usage.')
+
+
+def async_input(input_channel: q.Queue):
+    while True:
+        input_channel.put(input('>$ '))
 
 if __name__ == "__main__":
 
@@ -79,6 +84,8 @@ if __name__ == "__main__":
     FCOM_CHANNEL  = q.Queue()
     MCOM_CHANNEL  = q.Queue()
     UCOM_CHANNEL  = q.Queue()
+    A_IN_CHANNEL  = q.Queue()
+
     internal_state = ''
     command = None
     logger = log.LogAgent(LOG_CHANNEL, 'MAIN   ')
@@ -100,24 +107,29 @@ if __name__ == "__main__":
         uart_thread = th.Thread(target=uart.loop, args=(FRAME_CHANNEL, UCOM_CHANNEL,  LOG_CHANNEL))
         frame_thread = th.Thread(target=frame_builder.loop, args=(INPUT_CHANNEL, FRAME_CHANNEL, FCOM_CHANNEL, LOG_CHANNEL))
         log_thread = th.Thread(target=log.loop, args=(LOG_CHANNEL, LCOM_CHANNEL))
+        a_in_thread_d = th.Thread(target=async_input, args=(A_IN_CHANNEL, ))
+        a_in_thread_d.daemon = True
 
         model_thread.start()
         uart_thread.start()
         frame_thread.start()
         log_thread.start()
+        a_in_thread_d.start()
         internal_state = 'WORK'
 
-        while model_thread.is_alive() and log_thread.is_alive() and frame_thread.is_alive():
+        while model_thread.is_alive() and log_thread.is_alive() and frame_thread.is_alive() and log_thread.is_alive():
             uart_thread.join(0.3)
             frame_thread.join(0.3)
             model_thread.join(0.3)
             log_thread.join(0.3)
-
-
-
             # command thread
 
-            command = input("user@PISARZ $ ").strip() if command is None else command
+            command = A_IN_CHANNEL.get(timeout=1).strip() if not A_IN_CHANNEL.empty() else None
+
+            if command == '' or command is None:
+                sleep(0.1)
+                continue
+
             logger.log('DEBUG', f'Received command {command}')
             command = command.split(' ')
             match command[0]:
@@ -130,14 +142,30 @@ if __name__ == "__main__":
                     except:
                         logger.log('ERROR',
                                    f'Encountered unexpected error while executing command: {command[1]}.')
+                case None:
+                    continue
 
                 case _:
                     logger.log('ERROR', f'Unknown command: {' '.join(command)}')
-            command = None
+
             # just sleep for a bit
             sleep(0.1)
 
+        if not model_thread.is_alive():
+            logger.log('ERROR', 'Model is not running. Shutting down.')
+            raise KeyboardInterrupt
 
+        if not log_thread.is_alive():
+            print('MAIN   | ERROR: Loger is not running. Shutting down.')
+            raise KeyboardInterrupt
+
+        if not uart_thread.is_alive():
+            logger.log('ERROR', 'UART is not running. Shutting down.')
+            raise KeyboardInterrupt
+
+        if not frame_thread.is_alive():
+            logger.log('ERROR', 'FRAMER is not running. Shutting down.')
+            raise KeyboardInterrupt
 
 
     except (KeyboardInterrupt, SystemExit):
@@ -145,10 +173,10 @@ if __name__ == "__main__":
         UCOM_CHANNEL.put('STOP')
         MCOM_CHANNEL.put('STOP')
         FCOM_CHANNEL.put('STOP')
-        uart_thread.join(10)
-        frame_thread.join(10)
-        model_thread.join(10)
 
+        uart_thread.join()
+        frame_thread.join()
+        model_thread.join()
         LCOM_CHANNEL.put('STOP')
-        log_thread.join(10)
+        log_thread.join()
         sys.exit()
