@@ -49,6 +49,7 @@ The CRC byte contains a CRC checksum calculated using CRC-8-CCITT algorithm. The
 
 Required libraries:
 - crc
+- time
 - system
 - argparse
 - sounddevice

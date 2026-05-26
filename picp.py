@@ -17,6 +17,7 @@ class StartBits(Enum):
 
 class StandardMessages(Enum):
     HELLO = b'\x10'
+    HELLO_REPLY = b'\x10'
     GOODBYE = b'\x10'
     WAIT = b'\x20'
     RESUME = b'\x10'

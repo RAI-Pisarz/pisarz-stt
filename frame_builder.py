@@ -26,7 +26,6 @@ def loop(input_channel, output_channel, com_channel, log_channel):
         calculator = Calculator(Crc8.CCITT, optimized=True)
     while True:
 
-
         if not com_channel.empty():
             msg = com_channel.get()
             match msg:
