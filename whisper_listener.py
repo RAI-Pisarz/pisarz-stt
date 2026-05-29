@@ -1,206 +1,350 @@
 ## Original implementation of realtime transcription using whisper model at
 # https://github.com/davabase/whisper_real_time, time of access 14.04.26
 ## Adjusted for specific implementation by Szymon Czerwiński April 2026
+## Rewritten realtime transcription implementation using:
+## - sounddevice
+## - faster-whisper
+## Szymon Czerwiński May 2026
 
-import argparse, numpy as np, speech_recognition as sr, whisper, torch, configparser
+import configparser
+import numpy as np
+import sounddevice as sd
+
+from faster_whisper import WhisperModel
 
 from datetime import datetime, timedelta
 from queue import Queue
 from time import sleep
 from sys import platform
-# from turtledemo.chaos import jumpto
 
 from log import LogAgent
 
-# queue for model callback
+
+#
+# AUDIO QUEUE
+#
+
 q = Queue()
+
 
 def init():
     config = configparser.ConfigParser()
     config.read('pisarz.ini')
     return config
 
-def record_callback(_, audio: sr.AudioData) -> None:
+
+#
+# AUDIO CALLBACK
+#
+
+def record_callback(indata, frames, time, status):
     """
-    Threaded callback function to receive audio data when recordings finish.
-    audio: An AudioData containing the recorded bytes.
+    Called continuously by sounddevice.
+
+    indata:
+        numpy array float32
+        shape = (frames, channels)
     """
-    # print('I am in callback function')
-    data = audio.get_raw_data()
-    q.put(data)
+
+    if status:
+        print(status)
+
+    #
+    # convert stereo -> mono if needed
+    #
+
+    if len(indata.shape) > 1:
+        audio = np.mean(indata, axis=1)
+    else:
+        audio = indata
+
+    #
+    # store copy in queue
+    #
+
+    q.put(audio.copy())
 
 
 def loop(output_channel, com_channel, log_channel, parser, args):
-    """
-    :param output_channel:
-    :param com_channel:
-    :param log_channel:
-    :param parser:
-    :param args:
-    :return:
-
-    phrase_time - The last time a recording was retrieved from the queue.
-    phrase_bytes - Bytes object which holds audio data for the current phrase
-    recorder = sr.Recognizer() - We use SpeechRecognizer to record our audio because it has a nice feature where it can detect when speech ends.
-    recorder.dynamic_energy_threshold = dynamic energy compensation lowers the energy threshold dramatically to a point where the SpeechRecognizer never stops recording.
-    """
-    parser = parser # I was annoyed by a warning
+    parser = parser
     config = init()
     logger = LogAgent(log_channel, 'WHISPER')
     logger.log('TRACE', 'Initialising model...')
     state = 'WORK'
-
     phrase_time = None
-    phrase_bytes = bytes()
-    recorder = sr.Recognizer()
-    recorder.energy_threshold = 300 # args.energy_threshold
-    recorder.dynamic_energy_threshold = False
+
+    #
+    # numpy audio buffer instead of byte buffer
+    #
+
+    phrase_audio = np.array([], dtype=np.float32)
     transcription = ''
 
-    record_timeout = int(config['whisper']['record_timeout'])
-    phrase_timeout = int(config['whisper']['phrase_timeout'])
+    record_timeout = float(config['whisper']['record_timeout'])
+    phrase_timeout = float(config['whisper']['phrase_timeout'])
+
+    samplerate = int(args.samplerate)
 
     logger.log('TRACE', 'Timeouts set...')
 
-    # Important for linux users.
-    # Prevents permanent application hang and crash by using the wrong Microphone
+    #
+    # DEVICE SELECTION
+    #
 
-    sound_device = None
+    selected_device = None
     if 'linux' in platform:
         mic_name = args.device
+        devices = sd.query_devices()
+
         if not mic_name or mic_name == 'list':
-            print("Available microphone devices are: ")
-            for index, name in enumerate(sr.Microphone.list_microphone_names()):
-                print(f"| \"{index}\" | \"{name}\" ")
+            print("Available microphone devices:\n")
+
+            for index, dev in enumerate(devices):
+                print(
+                    f'| "{index}" | "{dev["name"]}" '
+                    f'| inputs={dev["max_input_channels"]} '
+                    f'| samplerate={dev["default_samplerate"]}'
+                )
             return None
         else:
-            for index, name in enumerate(sr.Microphone.list_microphone_names()):
+            for index, dev in enumerate(devices):
+                name = dev['name']
                 print(f'{index}, {name}')
-                if (isinstance(mic_name, str) and mic_name in name) or (isinstance(mic_name, int) and mic_name == index):
-                    print(f"Microphone with name \"{name}\" found")
-                    sound_device = sr.Microphone(sample_rate=args.samplerate, device_index=index)
+                if (
+                    isinstance(mic_name, str)
+                    and mic_name in name
+                ) or (
+                    isinstance(mic_name, int)
+                    and mic_name == index
+                ):
+                    selected_device = index
+                    print(f'Microphone "{name}" selected')
                     break
-    else:
-        sound_device = sr.Microphone(sample_rate=16000)
 
-    if sound_device is None: raise KeyboardInterrupt
-    else: print("I FOUND THE DEVICE! I FOUND THE DEVICE!")
+    #
+    # fallback
+    #
 
-    print(f'Sound device stream is {sound_device.stream}')
-    print(f'Sound device microphone stream is {sound_device.MicrophoneStream}')
+    if selected_device is None and 'linux' in platform:
+        logger.log(
+            'ERROR',
+            'Could not find requested microphone device.'
+        )
+        return
 
-    logger.log( 'INFO', f'Loading whisper.{args.size}...')
+    #
+    # LOAD MODEL
+    #
+
+    logger.log(
+        'INFO',
+        f'Loading faster-whisper {args.size}...'
+    )
+
     time_before_model_loaded = datetime.now()
 
-    # Load / Download model
     try:
-        audio_model = whisper.load_model(args.size)
+        audio_model = WhisperModel(
+            args.size,
+            device='cpu',
+            compute_type='int8',
+            cpu_threads=1
+        )
+
     except Exception as e:
-        logger.log( 'ERROR', f'Failed to load whisper.\n{e}')
+        logger.log(
+            'ERROR',
+            f'Failed to load faster-whisper.\n{e}'
+        )
         return
 
     model_loadtime = datetime.now() - time_before_model_loaded
-    logger.log( 'INFO',
-        f'Model whisper.{args.size} loaded. Time taken: {model_loadtime.total_seconds()} seconds')
 
-    with sound_device:
-        recorder.adjust_for_ambient_noise(sound_device)
+    logger.log(
+        'INFO',
+        f'Model loaded. '
+        f'Time taken: {model_loadtime.total_seconds()} seconds'
+    )
 
-    logger.log( 'INFO', 'Sound device set...')
+    #
+    # START AUDIO STREAM
+    #
 
-    # Create a background thread that will pass us raw audio bytes.
-    recorder.listen_in_background(sound_device, record_callback, phrase_time_limit=record_timeout)
+    try:
+        stream = sd.InputStream(
+            samplerate=samplerate,
+            blocksize=int(samplerate * record_timeout),
+            device=selected_device,
+            channels=1,
+            dtype='float32',
+            callback=record_callback
+        )
+        stream.start()
 
-    # Cue the user that we're ready to go.
-    logger.log( 'INFO', 'Model ready.')
+    except Exception as e:
+        logger.log(
+            'ERROR',
+            f'Failed to start audio stream.\n{e}'
+        )
+        return
+
+    logger.log('INFO', 'Sound device set...')
+    logger.log('INFO', 'Model ready.')
+
+    #
+    # MAIN LOOP
+    #
 
     while True:
+        #
+        # COM CHANNEL
+        #
         if not com_channel.empty():
             msg = com_channel.get()
-
             match msg:
                 case 'WAIT':
-                    logger.log('INFO', 'Received WAIT - halting work.')
+                    logger.log(
+                        'INFO',
+                        'Received WAIT - halting work.'
+                    )
                     state = 'WAIT'
-
                 case 'RESUME':
-                    logger.log('INFO', 'Received RESUME - resuming work.')
+                    logger.log(
+                        'INFO',
+                        'Received RESUME - resuming work.'
+                    )
                     state = 'WORK'
-
                 case 'QUIET':
-                    logger.log('INFO', 'Received QUIET - silent work.')
+                    logger.log(
+                        'INFO',
+                        'Received QUIET - silent work.'
+                    )
                     state = 'QUIET'
-
                 case 'GET STATE':
-                    logger.log('TRACE', 'Received GET STATE.')
-                    logger.log('INFO', f'Current state: {state}')
-
+                    logger.log(
+                        'TRACE',
+                        'Received GET STATE.'
+                    )
+                    logger.log(
+                        'INFO',
+                        f'Current state: {state}'
+                    )
                 case 'STOP':
-                    logger.log( 'INFO', 'Received STOP - shutting down.')
+                    logger.log(
+                        'INFO',
+                        'Received STOP - shutting down.'
+                    )
                     break
-
                 case 'UPDATE':
-                    logger.log( 'INFO', 'Updating...')
+                    logger.log(
+                        'INFO',
+                        'Updating...'
+                    )
                     config = init()
-                    phrase_timeout = int(config['whisper']['phrase_timeout'])
-
+                    phrase_timeout = float(
+                        config['whisper']['phrase_timeout']
+                    )
                 case _:
-                    logger.log( 'ERROR', 'Unrecognised command on COM channel!')
+                    logger.log(
+                        'ERROR',
+                        'Unrecognised command on COM channel!'
+                    )
+
+        #
+        # WAIT MODE
+        #
 
         if state == 'WAIT':
-            if not q.empty(): # empty the queue
+            while not q.empty():
                 q.get()
-                q.task_done()
             sleep(0.25)
             continue
 
         try:
             now = datetime.now()
-
+            #
+            # NO AUDIO YET
+            #
             if q.empty() and not (phrase_time and now - phrase_time > timedelta(seconds=phrase_timeout)):
+                sleep(0.05)
+                continue
+
+            phrase_complete = False
+            #
+            # PHRASE COMPLETION
+            #
+
+            if phrase_time and now - phrase_time > timedelta(seconds=phrase_timeout):
+                phrase_complete = True
+                if state != 'QUIET':
+                    logger.log('DEBUG', 'Phrase completed.')
+                    logger.log('TRACE', f'Time: {datetime.now()}')
+
+            phrase_time = now
+
+            # GATHER AUDIO
+            chunks = []
+            while not q.empty():
+                chunks.append(q.get())
+            # concatenate queue chunks
+            if chunks:
+                audio_chunk = np.concatenate(chunks)
+                phrase_audio = np.concatenate(
+                    [phrase_audio, audio_chunk]
+                )
+                if state != 'QUIET':
+                    logger.log('TRACE','Updated phrase audio.')
+
+            # SKIP EMPTY AUDIO
+            if len(phrase_audio) == 0:
                 sleep(0.1)
                 continue
 
+            # TRANSCRIBE
+            segments, info = audio_model.transcribe(
+                phrase_audio,
+                language=args.language,
+                beam_size=1,
+                vad_filter=False
+            )
 
-            phrase_complete = False
+            text = ' '.join(segment.text for segment in segments).strip()
 
-            # If enough time has passed between recordings, consider the phrase complete.
-            # Clear the current working audio buffer to start over with the new data.
-            if phrase_time and now - phrase_time > timedelta(seconds=phrase_timeout):
-                phrase_bytes = bytes()
-                phrase_complete = True
-                if state != 'QUIET': logger.log( 'DEBUG', 'Phrase completed.')
-                if state != 'QUIET': logger.log( 'TRACE', f'Time: {datetime.now()}')
+            if state != 'QUIET':
+                logger.log('TRACE',f'Stripped text: {text}')
 
-            # This is the last time we received new audio data from the queue.
-            phrase_time = now
+            # FINALIZE PHRASE
+            if phrase_complete:
+                if text != '':
+                    if state != 'QUIET':
+                        logger.log('TRACE', 'Putting transcribed phrase in queue.\n'
+                            f'\t\tPhrase: {text}')
+                    output_channel.put(text)
+                text = ''
 
-            # Combine audio data from queue
-            audio_data = b''.join(q.queue)
-            q.queue.clear()
-            # Add the new audio data to the accumulated data for this phrase
-            phrase_bytes += audio_data
-            if state != 'QUIET': logger.log( 'TRACE', 'Updated phrase bytes.')
-            # Convert in-ram buffer to something the model can use directly without needing a temp file.
-            # Convert data from 16-bit wide integers to floating point with a width of 32 bits.
-            # Clamp the audio stream frequency to a PCM wavelength compatible default of 32768hz max.
-            audio_np = np.frombuffer(phrase_bytes, dtype=np.int16).astype(np.float32) / 32768.0
+                # reset phrase audio
+                phrase_audio = np.array([], dtype=np.float32)
 
-            # Read the transcription.
-            result = audio_model.transcribe(audio_np, fp16=torch.cuda.is_available(), language='pl')
-            text = result['text'].strip()
-            if state != 'QUIET': logger.log( 'TRACE', f'stripped text: {text}')
-            # If we detected a pause between recordings, add a new item to our transcription.
-            # Otherwise, edit the existing one.
-            if phrase_complete and not transcription == '':
-                if state != 'QUIET': logger.log( 'TRACE', 'Putting transcribed phrase in the queue.\n'
-                                                  f'\t\tPhrase is {'empty' if transcription == '' else transcription}')
-                output_channel.put(transcription)
-                transcription = ''
-            elif not text == '':
-                transcription = text
-            else: # for the sake of cpu's mental health
+            else:
                 sleep(0.3)
 
         except KeyboardInterrupt:
             break
+
+        except Exception as e:
+            logger.log('ERROR', f'Whisper runtime error:\n{e}')
+            sleep(0.5)
+
+    #
+    # CLEANUP
+    #
+
+    try:
+        stream.stop()
+        stream.close()
+
+    except Exception:
+        pass
+
+    logger.log('INFO', 'Whisper thread shut down.')
+

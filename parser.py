@@ -30,7 +30,7 @@ def build():
         help="input device (numeric ID or substring)"
     )
     parser.add_argument(
-        "-r", "--samplerate", type=int, help="sampling rate"
+        "-r", "--samplerate", type=int, help="sampling rate", default=16000
     )
     parser.add_argument(
         "-m", "--model", default='whisper', type=str, help="language model; "
