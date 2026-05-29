@@ -84,6 +84,11 @@ def loop(output_channel, com_channel, log_channel, parser, args):
         sound_device = sr.Microphone(sample_rate=16000)
 
     if sound_device is None: raise KeyboardInterrupt
+    else: print("I FOUND THE DEVICE! I FOUND THE DEVICE!")
+
+    print(f'Sound device stream is {sound_device.stream}')
+    print(f'Sound device microphone stream is {sound_device.MicrophoneStream}')
+
     logger.log( 'INFO', f'Loading whisper.{args.size}...')
     time_before_model_loaded = datetime.now()
 
