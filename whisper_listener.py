@@ -35,7 +35,7 @@ def linux_workaround(args):
         if not mic_name or mic_name == 'list':
             print("Available microphone devices are: ")
             for index, name in enumerate(sr.Microphone.list_microphone_names()):
-                print(f"Microphone with name \"{name}\" found")
+                print(f"| \"{index}\" | \"{name}\" ")
             return None
         else:
             found = False
@@ -87,7 +87,7 @@ def loop(output_channel, com_channel, log_channel, parser, args):
     # Important for linux users.
     # Prevents permanent application hang and crash by using the wrong Microphone
     sound_device = linux_workaround(args)
-
+    if sound_device is None: raise KeyboardInterrupt
     logger.log( 'INFO', f'Loading whisper.{args.size}...')
     time_before_model_loaded = datetime.now()
 
