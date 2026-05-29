@@ -41,7 +41,7 @@ def linux_workaround(args):
             found = False
             for index, name in enumerate(sr.Microphone.list_microphone_names()):
                 print(f'{index}, {name}')
-                if str(mic_name) in name or int(mic_name) in index:
+                if (isinstance(mic_name, str) and mic_name in name) or (isinstance(mic_name, int) and mic_name == index):
                     print(f"Microphone with name \"{name}\" found")
                     source = sr.Microphone(sample_rate=16000, device_index=index)
                     found = True
