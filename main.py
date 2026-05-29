@@ -3,7 +3,7 @@
 ##
 
 # local modules
-import uart, vosk_listener, whisper_listener, frame_builder, parser, log
+import uart, vosk_listener, whisper_listener, frame_builder, parser, log, loremipsum
 
 # globals
 import sys, threading as th, queue as q
@@ -94,12 +94,15 @@ if __name__ == "__main__":
         # parse arguments put in the command
         parser, args = parser.build()
 
-        if args.model == 'vosk':
-            model = vosk_listener
-        elif args.model == 'whisper':
-            model = whisper_listener
-        else:
-            sys.exit(1)
+        match args.model:
+            case 'vosk':
+                model = vosk_listener
+            case 'whisper':
+                model = whisper_listener
+            case 'loremipsum':
+                model = loremipsum
+            case _:
+                sys.exit(1)
 
 
         # prepare threads

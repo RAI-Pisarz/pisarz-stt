@@ -71,7 +71,7 @@ def loop(input_channel, output_channel, com_channel, log_channel):
             continue
         retry = 0
 
-        # logger.log('TRACE', '\n'
+        # logger.log('DEBUG', '\n'
         #       f'\t\tExtracting from: {work_bytes}\n'
         #       f'\t\tExtracting {frame_size} bytes\n'
         #       f'\t\tExtracting {work_bytes[:frame_size]}')
