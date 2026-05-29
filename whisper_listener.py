@@ -29,29 +29,6 @@ def record_callback(_, audio: sr.AudioData) -> None:
     data = audio.get_raw_data()
     q.put(data)
 
-def linux_workaround(args):
-    if 'linux' in platform:
-        mic_name = args.device
-        if not mic_name or mic_name == 'list':
-            print("Available microphone devices are: ")
-            for index, name in enumerate(sr.Microphone.list_microphone_names()):
-                print(f"| \"{index}\" | \"{name}\" ")
-            return None
-        else:
-            found = False
-            for index, name in enumerate(sr.Microphone.list_microphone_names()):
-                print(f'{index}, {name}')
-                if (isinstance(mic_name, str) and mic_name in name) or (isinstance(mic_name, int) and mic_name == index):
-                    print(f"Microphone with name \"{name}\" found")
-                    source = sr.Microphone(sample_rate=16000, device_index=index)
-                    found = True
-                    break
-    else:
-        source = sr.Microphone(sample_rate=16000)
-        found = True
-    if not found: print(f"Microphone with name \"{args.device}\" not found")
-    return source if found else None
-
 
 def loop(output_channel, com_channel, log_channel, parser, args):
     """
@@ -87,7 +64,25 @@ def loop(output_channel, com_channel, log_channel, parser, args):
 
     # Important for linux users.
     # Prevents permanent application hang and crash by using the wrong Microphone
-    sound_device = linux_workaround(args)
+
+    sound_device = None
+    if 'linux' in platform:
+        mic_name = args.device
+        if not mic_name or mic_name == 'list':
+            print("Available microphone devices are: ")
+            for index, name in enumerate(sr.Microphone.list_microphone_names()):
+                print(f"| \"{index}\" | \"{name}\" ")
+            return None
+        else:
+            for index, name in enumerate(sr.Microphone.list_microphone_names()):
+                print(f'{index}, {name}')
+                if (isinstance(mic_name, str) and mic_name in name) or (isinstance(mic_name, int) and mic_name == index):
+                    print(f"Microphone with name \"{name}\" found")
+                    sound_device = sr.Microphone(sample_rate=16000, device_index=index)
+                    break
+    else:
+        sound_device = sr.Microphone(sample_rate=16000)
+
     if sound_device is None: raise KeyboardInterrupt
     logger.log( 'INFO', f'Loading whisper.{args.size}...')
     time_before_model_loaded = datetime.now()
