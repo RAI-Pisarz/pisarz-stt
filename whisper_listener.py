@@ -38,15 +38,18 @@ def linux_workaround(args):
                 print(f"Microphone with name \"{name}\" found")
             return None
         else:
+            found = False
             for index, name in enumerate(sr.Microphone.list_microphone_names()):
                 if (mic_name is str and mic_name in name) or (mic_name is int and mic_name in index):
                     print(f"Microphone with name \"{name}\" found")
                     source = sr.Microphone(sample_rate=16000, device_index=index)
+                    found = True
                     break
     else:
         source = sr.Microphone(sample_rate=16000)
+        found = True
 
-    return source
+    return source if found else None
 
 
 def loop(output_channel, com_channel, log_channel, parser, args):
