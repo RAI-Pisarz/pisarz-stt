@@ -78,7 +78,7 @@ def loop(output_channel, com_channel, log_channel, parser, args):
                 print(f'{index}, {name}')
                 if (isinstance(mic_name, str) and mic_name in name) or (isinstance(mic_name, int) and mic_name == index):
                     print(f"Microphone with name \"{name}\" found")
-                    sound_device = sr.Microphone(sample_rate=16000, device_index=index)
+                    sound_device = sr.Microphone(sample_rate=44100, device_index=index)
                     break
     else:
         sound_device = sr.Microphone(sample_rate=16000)
