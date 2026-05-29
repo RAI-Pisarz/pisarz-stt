@@ -40,6 +40,7 @@ def linux_workaround(args):
         else:
             for index, name in enumerate(sr.Microphone.list_microphone_names()):
                 if (mic_name is str and mic_name in name) or (mic_name is int and mic_name in index):
+                    print(f"Microphone with name \"{name}\" found")
                     source = sr.Microphone(sample_rate=16000, device_index=index)
                     break
     else:
