@@ -31,7 +31,8 @@ class LogAgent:
         If many threads send a log message to the logger at the same time, it is undefined which message will be logged first.
         """
         if type(level) is int: level = LogLevel[level]
-        self.queue.put([level, self.source, message])
+        timestamp = datetime.now().strftime('%H:%M:%S | ')
+        self.queue.put([level, timestamp+self.source, message])
 
 LogLevel = {
     'TRACE':    1,

@@ -53,10 +53,10 @@ def loop(input_channel, output_channel, com_channel, log_channel):
             sleep(retry_time)
             continue
 
-        logger.log('TRACE', f'SLEEPER CONDITION FOR THE LOOP: \n'
-                                          f'\t\tinput channel: {'empty' if input_channel.empty() else 'full' }\n'
-                                          f'\t\tretry: {retry}\n'
-                                          f'\t\twork_bytes: {work_bytes}\n')
+        # logger.log('TRACE', f'SLEEPER CONDITION FOR THE LOOP: \n'
+        #                                   f'\t\tinput channel: {'empty' if input_channel.empty() else 'full' }\n'
+        #                                   f'\t\tretry: {retry}\n'
+        #                                   f'\t\twork_bytes: {work_bytes}\n')
 
         try:
             input_string = input_channel.get(timeout=0.5)
@@ -66,15 +66,15 @@ def loop(input_channel, output_channel, com_channel, log_channel):
             pass
 
         if len(work_bytes) < frame_size and retry < max_retry:
-            logger.log('TRACE', f'Work bytes too short, retrying {retry}...')
+            # logger.log('TRACE', f'Work bytes too short, retrying {retry}...')
             retry += 1
             continue
         retry = 0
 
-        logger.log('TRACE', '\n'
-              f'\t\tExtracting from: {work_bytes}\n'
-              f'\t\tExtracting {frame_size} bytes\n'
-              f'\t\tExtracting {work_bytes[:frame_size]}')
+        # logger.log('TRACE', '\n'
+        #       f'\t\tExtracting from: {work_bytes}\n'
+        #       f'\t\tExtracting {frame_size} bytes\n'
+        #       f'\t\tExtracting {work_bytes[:frame_size]}')
 
 
         message_bytes = work_bytes[:frame_size]
@@ -82,8 +82,10 @@ def loop(input_channel, output_channel, com_channel, log_channel):
 
         if not USE_PICP:
             output_channel.put(message_bytes)
+            # logger.log('TRACE', f'Put message in UART queue. Message content: {message_bytes}')
             continue
-        # else:
+        else:
+            continue
         """
             TODO:
             PICP frame building implementation
