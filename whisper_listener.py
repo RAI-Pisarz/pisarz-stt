@@ -48,7 +48,7 @@ def linux_workaround(args):
     else:
         source = sr.Microphone(sample_rate=16000)
         found = True
-
+    if not found: print(f"Microphone with name \"{args.device}\" not found")
     return source if found else None
 
 
