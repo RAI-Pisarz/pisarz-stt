@@ -31,7 +31,7 @@ def record_callback(_, audio: sr.AudioData) -> None:
 
 def linux_workaround(args):
     if 'linux' in platform:
-        mic_name = args.default_microphone
+        mic_name = args.device
         if not mic_name or mic_name == 'list':
             print("Available microphone devices are: ")
             for index, name in enumerate(sr.Microphone.list_microphone_names()):
@@ -39,7 +39,7 @@ def linux_workaround(args):
             return None
         else:
             for index, name in enumerate(sr.Microphone.list_microphone_names()):
-                if mic_name in name:
+                if mic_name in name or mic_name in index:
                     source = sr.Microphone(sample_rate=16000, device_index=index)
                     break
     else:
