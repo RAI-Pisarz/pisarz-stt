@@ -3,7 +3,7 @@
 ##
 
 # local modules
-import uart, vosk_listener, whisper_listener, frame_builder, parser, log, loremipsum
+import uart, vosk_listener, whisper_listener, frame_builder, parser, log, loremipsum, decider
 
 # globals
 import sys, threading as th, queue as q
@@ -24,6 +24,8 @@ def state(command):
                     channel = UCOM_CHANNEL
                 case 'framer':
                     channel = FCOM_CHANNEL
+                case 'decider':
+                    channel = DCOM_CHANNEL
             if channel is None:
                 logger.log('ERROR', f'Can\'t set state for: {command[2]}.')
                 return
@@ -33,13 +35,13 @@ def state(command):
 
         case 'model':
             if not model_thread.is_alive():
-                logger.log('ERROR', f'Frame builder is not running.')
+                logger.log('ERROR', f'Model is not running.')
                 return
             MCOM_CHANNEL.put('GET STATE')
 
         case 'uart':
             if not uart_thread.is_alive():
-                logger.log('ERROR', f'Frame builder is not running.')
+                logger.log('ERROR', f'UART is not running.')
                 return
             UCOM_CHANNEL.put('GET STATE')
 
@@ -49,6 +51,12 @@ def state(command):
                 return
             FCOM_CHANNEL.put('GET STATE')
 
+        case 'decider':
+            if not decider_thread.is_alive():
+                logger.log('ERROR', f'Decider is not running.')
+                return
+            DCOM_CHANNEL.put('GET STATE')
+
         case 'logger':
             print('Logging agent has no internal state to track.')
 
@@ -57,7 +65,7 @@ def state(command):
                   '\tusage:\n'
                   '\t\tstate {module}\n'
                   '\t\tstate set {module} {state}\n\n'
-                  '\tavailable modules: model uart framer\n'
+                  '\tavailable modules: model uart framer decider\n'
                   '\tavailable states:  WAIT, WORK, RESUME, STOP\n'
                   '\tmodel has additional QUIET state to suppress any logging\n'
                   '\tmind: WORK and RESUME are synonymous\n'
@@ -71,29 +79,35 @@ def async_input(input_channel: q.Queue):
     while True:
         input_channel.put(input('>$ '))
 
+
 if __name__ == "__main__":
+
+    # parse arguments put in the command
+    parser, args = parser.build()
+    # if '--help' in sys.argv or '-h' in sys.argv:
+    #     sys.exit(0)
 
     print("#" * 80)
     print("## Welcome.")
     print("#" * 80)
 
-    INPUT_CHANNEL = q.Queue()
-    FRAME_CHANNEL = q.Queue()
-    LOG_CHANNEL   = q.Queue()
-    LCOM_CHANNEL  = q.Queue()
-    FCOM_CHANNEL  = q.Queue()
-    MCOM_CHANNEL  = q.Queue()
-    UCOM_CHANNEL  = q.Queue()
-    A_IN_CHANNEL  = q.Queue()
+    INPUT_CHANNEL   = q.Queue()
+    FRAME_CHANNEL   = q.Queue()
+    MESSAGE_CHANNEL = q.Queue()
+    LOG_CHANNEL     = q.Queue()
+    LCOM_CHANNEL    = q.Queue()
+    FCOM_CHANNEL    = q.Queue()
+    MCOM_CHANNEL    = q.Queue()
+    UCOM_CHANNEL    = q.Queue()
+    A_IN_CHANNEL    = q.Queue()
+    DCOM_CHANNEL    = q.Queue()
+
 
     internal_state = ''
     command = None
     logger = log.LogAgent(LOG_CHANNEL, 'MAIN   ')
 
     try:
-        # parse arguments put in the command
-        parser, args = parser.build()
-
         match args.model:
             case 'vosk':
                 model = vosk_listener
@@ -107,9 +121,13 @@ if __name__ == "__main__":
 
         # prepare threads
         model_thread = th.Thread(target=model.loop, args=(INPUT_CHANNEL, MCOM_CHANNEL, LOG_CHANNEL, parser, args))
-        uart_thread = th.Thread(target=uart.loop, args=(FRAME_CHANNEL, UCOM_CHANNEL,  LOG_CHANNEL))
-        frame_thread = th.Thread(target=frame_builder.loop, args=(INPUT_CHANNEL, FRAME_CHANNEL, FCOM_CHANNEL, LOG_CHANNEL))
+        if not args.transcription_test:
+            uart_thread = th.Thread(target=uart.loop, args=(FRAME_CHANNEL, UCOM_CHANNEL,  LOG_CHANNEL))
+        else:
+            uart_thread = th.Thread(target=uart.tt, args=(FRAME_CHANNEL, UCOM_CHANNEL, LOG_CHANNEL))
+        frame_thread = th.Thread(target=frame_builder.loop, args=(MESSAGE_CHANNEL, FRAME_CHANNEL, FCOM_CHANNEL, LOG_CHANNEL))
         log_thread = th.Thread(target=log.loop, args=(LOG_CHANNEL, LCOM_CHANNEL))
+        decider_thread = th.Thread(target=decider.loop, args=(INPUT_CHANNEL, MESSAGE_CHANNEL, DCOM_CHANNEL, LOG_CHANNEL, args))
         a_in_thread_d = th.Thread(target=async_input, args=(A_IN_CHANNEL, ))
         a_in_thread_d.daemon = True
 
@@ -118,6 +136,7 @@ if __name__ == "__main__":
         frame_thread.start()
         log_thread.start()
         a_in_thread_d.start()
+        decider_thread.start()
         internal_state = 'WORK'
 
         while model_thread.is_alive() and log_thread.is_alive() and frame_thread.is_alive() and log_thread.is_alive():
@@ -125,6 +144,7 @@ if __name__ == "__main__":
             frame_thread.join(0.3)
             model_thread.join(0.3)
             log_thread.join(0.3)
+            decider_thread.join(0.3)
             # command thread
 
             command = A_IN_CHANNEL.get(timeout=1).strip() if not A_IN_CHANNEL.empty() else None
@@ -170,16 +190,22 @@ if __name__ == "__main__":
             logger.log('ERROR', 'FRAMER is not running. Shutting down.')
             raise KeyboardInterrupt
 
+        if not decider_thread.is_alive():
+            logger.log('ERROR', 'DECIDER is not running. Shutting down.')
+            raise KeyboardInterrupt
+
 
     except (KeyboardInterrupt, SystemExit):
         print(f"\n{logger.source} | INFO: Shutting down...")
         UCOM_CHANNEL.put('STOP')
         MCOM_CHANNEL.put('STOP')
         FCOM_CHANNEL.put('STOP')
+        DCOM_CHANNEL.put('STOP')
 
         uart_thread.join()
         frame_thread.join()
         model_thread.join()
+        decider_thread.join()
         LCOM_CHANNEL.put('STOP')
         log_thread.join()
         sys.exit()

@@ -15,6 +15,53 @@ def connect(logger, config):
 
     return serial
 
+def tt(frame_channel, com_channel, log_channel):
+        ########
+        # INIT #
+        ########
+
+        config = init()
+        logger = LogAgent(log_channel, 'UART   ')
+        state = 'WORK'
+        logger.log('INFO', 'Launching in transcription test mode.')
+        ##################
+        # MAIN UART LOOP #
+        ##################
+        while True:
+            if not com_channel.empty():
+                msg = com_channel.get()
+
+                match msg:
+                    case 'WAIT':
+                        logger.log('INFO', 'Received WAIT - halting work.')
+                        state = 'WAIT'
+
+                    case 'RESUME':
+                        logger.log('INFO', 'Received RESUME - resuming work.')
+                        state = 'WORK'
+
+                    case 'GET STATE':
+                        logger.log('TRACE', 'Received GET STATE.')
+                        logger.log('INFO', f'Current state: {state}')
+
+                    case 'STOP':
+                        logger.log('INFO', 'Received STOP - shutting down.')
+                        return
+
+                    case _:
+                        logger.log('ERROR', 'Unrecognised command on COM channel!')
+
+
+            if frame_channel.empty() or state == 'WAIT':
+                # just sleep for a bit to avoid eating the processor time
+                sleep(0.25)
+                continue
+
+            if not frame_channel.empty():
+                frame_channel.get()
+                continue
+
+
 def loop(frame_channel, com_channel, log_channel):
     ########
     # INIT #

@@ -6,6 +6,56 @@ Further processing includes splitting text into chunks and calculating CRCs for 
 
 PICP is discussed later on in this document.
 
+# Required python libraries:\
+crc, time, system, threading, argparse, sounddevice, queue, whisper, their respective dependencies
+
+# Usage
+
+To launch the program: 
+
+` python main.py`
+
+Program has following possible arguments:
+
+usage: main.py [-h] [-l] [-d DEVICE] [-r SAMPLERATE] [-m MODEL] [-L LANGUAGE] [-s SIZE]\
+options:\
+  -h, --help            show this help message and exit\
+  -l, --list-devices    show list of available audio devices and exit\
+  -d, --device DEVICE   input device (numeric ID or substring)\
+  -r, --samplerate SAMPLERATE\
+                        set sample rate for audio capture in Hz. Defaults to 16000\
+  -m, --model MODEL     language model used for transcription; currently available models are: whisper; loremipsum; Defaults to whisper.\
+  -L, --language LANGUAGE\
+                        language transcription model will focus on; examples for whisper: pl, en\
+  -s, --size SIZE       model size; relevant only for whisper. Available: medium, small, base, tiny
+
+You can also access above inbuilt help message via: 
+
+`python main.py -h` or `python main.py --help`
+
+Certain options are not available via commandline arguments. These may be modified within the 'pisarz.md' file.\
+These options contain:
+
+**WHISPER**
+- Recording timeout in seconds
+- Phrase recording timeout in seconds
+
+**UART**
+- Maximum retry times for when the current message is too short for defined frame size
+- Whether to use PICP (described below. Currently not implemented.)
+- Message frame fixed size in bytes
+- COM port to be used for communication with downstream device
+
+**LOG**
+- Logging level
+- Whether to dump logs into a file
+- Log dumpfile path
+- Whether to log all messages in dumpfile; ignores logging level setting
+
+**OLLAMA**
+- url to ollama server
+- model hosted on ollama to be communicated with
+
 # PICP - PiSARZ Interal Communication Protocol
 **PICP** is an UART based protocol for internal communication between controllers within the project. 
 It is designed to allow for two-way communication between devices. Protocol uses 32 byte frames for communication.
@@ -46,13 +96,3 @@ The CRC byte contains a CRC checksum calculated using CRC-8-CCITT algorithm. The
 | 0010 0000 | 0x20 | CNT_END  | This message is split between data frames. Last MSG byte of this and first MSG byte of next are likely to be part of the same data unit. |
 | 0100 0000 | 0x40 | RPL_END  | Demands a reply from reciever.                                                                                                           |
 
-
-Required libraries:
-- crc
-- time
-- system
-- argparse
-- sounddevice
-- queue
-- vosk
-- whisper
