@@ -13,7 +13,11 @@ crc, time, system, threading, argparse, sounddevice, queue, whisper, their respe
 
 To launch the program: 
 
-` python main.py`
+`python main.py`
+
+An example standard launch with polish small whisper model using transcription test mode:
+
+`python main.py -m whisper -L pl -s small -t`
 
 Program has following possible arguments:
 
